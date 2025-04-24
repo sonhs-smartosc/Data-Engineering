@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    ports:
+      - "5001:5001"
+    environment:
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID}
+      - TABLE_ID=${TABLE_ID}
+    volumes:
+      - .:/app
+    command: gunicorn --bind :5001 app:app

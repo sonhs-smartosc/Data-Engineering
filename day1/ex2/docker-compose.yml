@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    ports:
+      - "5001:5001"
+    environment:
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID}
+      - TABLE_ID=${TABLE_ID}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/service-account-key.json
+      - API_KEY=${API_KEY}
+
+    volumes:
+      - .:/app
+      - ./credentials/service-account-key.json:/app/credentials/service-account-key.json
+    command: gunicorn --bind :5001 app:app

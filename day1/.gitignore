@@ -1,0 +1,7 @@
+/python_test/.env
+.venv
+/ex2/.env
+/ex2/__pycache__/*
+/ex2/.idea
+/ex2/credentials/
+.idea

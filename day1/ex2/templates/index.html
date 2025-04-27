@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>BigQuery Data Viewer</title>
+    <style>
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        th, td {
+            border: 1px solid black;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+    <h1>BigQuery Data Viewer</h1>
+    <button onclick="fetchData()">Load Data</button>
+    <div id="result"></div>
+
+    <script>
+        function fetchData() {
+            fetch('/query')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        displayData(data.data);
+                    } else {
+                        document.getElementById('result').innerHTML =
+                            `<p style="color: red">Error: ${data.message}</p>`;
+                    }
+                })
+                .catch(error => {
+                    document.getElementById('result').innerHTML =
+                        `<p style="color: red">Error: ${error}</p>`;
+                });
+        }
+
+        function displayData(data) {
+            if (data.length === 0) {
+                document.getElementById('result').innerHTML = '<p>No data found</p>';
+                return;
+            }
+
+            let table = '<table><tr>';
+            // Tạo header
+            for (let key in data[0]) {
+                table += `<th>${key}</th>`;
+            }
+            table += '</tr>';
+
+            // Tạo rows
+            data.forEach(row => {
+                table += '<tr>';
+                for (let key in row) {
+                    table += `<td>${row[key]}</td>`;
+                }
+                table += '</tr>';
+            });
+
+            table += '</table>';
+            document.getElementById('result').innerHTML = table;
+        }
+    </script>
+</body>
+</html>

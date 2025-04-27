@@ -8,7 +8,7 @@ import dotenv as dotenv
 app = Flask(__name__)
 
 dotenv.load_dotenv()
-client = bigquery.Client(project=os.getenv('GCP_PROJECT_ID'))
+# client = bigquery.Client(project=os.getenv('GCP_PROJECT_ID'))
 def get_bigquery_client():
     """
     Creates and returns a BigQuery client using credentials from environment variables
@@ -44,7 +44,7 @@ def home():
 @app.route('/query')
 def query_data():
     try:
-        get_bigquery_client()
+        client = get_bigquery_client()
         table_id = os.getenv('TABLE_ID')
         query = f"""
         SELECT *

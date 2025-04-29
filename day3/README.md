@@ -37,3 +37,21 @@ document: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-insta
       + `newgrp docker`
     + git:
       + sudo yum install -y git
+
+
+    
++ Azure:
+
+install azure cli: 
+    `sudo apt update`
+    `sudo apt install -y ca-certificates curl apt-transport-https lsb-release gnupg`
+    `curl -sL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor | sudo tee /usr/share/keyrings/microsoft.gpg > /dev/null`
+    `echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/azure-cli.list`
+    `sudo apt update`
+    `sudo apt install -y azure-cli`
+
+check az version
+    az version
+
+azure login
+    `az login`

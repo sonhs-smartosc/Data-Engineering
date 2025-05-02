@@ -1,0 +1,4 @@
+.venv
+learn-terraform-aws-instance/.terraform
+ex2/credentials
+.idea

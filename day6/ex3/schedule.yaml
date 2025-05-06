@@ -1,0 +1,29 @@
+id: schedule
+namespace: company.team
+
+inputs:
+  - id: api_url
+    type: STRING
+    defaults: https://jsonplaceholder.typicode.com/users
+
+tasks:
+  - id: fetch_data
+    type: io.kestra.plugin.core.http.Request
+    uri: "{{inputs.api_url}}"
+
+  - id: save_to_csv
+    type: io.kestra.plugin.scripts.python.Script
+    warningOnStdErr: false
+    outputFiles:
+      - "users.csv"
+    script: |
+      import json
+      import csv
+
+      data = json.loads('''{{ outputs.fetch_data.body }}''')
+
+      print(data[0])
+triggers:
+  - id: schedule_a_minute
+    type: io.kestra.plugin.core.trigger.Schedule
+    cron: "*/1 * * * *"

@@ -1,0 +1,33 @@
+id: api_to_csv_handle_error
+namespace: dev.exercises
+
+inputs:
+  - id: api_url
+    type: STRING
+    defaults: https://jsonplaceholder.typicode.com/usersa
+
+tasks:
+  - id: fetch_data
+    type: io.kestra.plugin.core.http.Request
+    uri: "{{inputs.api_url}}"
+
+  - id: save_to_csv
+    type: io.kestra.plugin.scripts.python.Script
+    warningOnStdErr: false
+    outputFiles:
+      - "users.csv"
+    script: |
+      import json
+      import csv
+
+      data = json.loads('''{{ outputs.fetch_data.body }}''')
+
+      with open('users.csv', mode='w', newline='') as f:
+          writer = csv.DictWriter(f, fieldnames=data[0].keys())
+          writer.writeheader()
+          writer.writerows(data)
+errors:
+  - id: handle_error
+    type: io.kestra.plugin.core.log.Log
+    message: I'm failing {{ errorLogs()[0]['taskId'] }} # Because errorLogs() is an array, the first taskId to fail is retrieved.
+    level: INFO

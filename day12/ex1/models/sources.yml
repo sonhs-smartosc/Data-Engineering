@@ -1,0 +1,16 @@
+# my_new_dbt_project/models/sources.yml
+
+version: 2 # Phiên bản của cấu hình nguồn
+
+sources:
+  # Định nghĩa một nguồn (schema)
+  - name: raw_data # Ví dụ: raw_data. Đây là tên bạn sẽ dùng trong {{ source(...) }}
+    schema: raw_data # Schema thực tế trong database chứa dữ liệu thô
+
+    # Định nghĩa các bảng trong nguồn đó
+    tables:
+      - name: orders # Ví dụ: orders. dbt sẽ tham chiếu bằng {{ source('raw_data', 'orders') }}
+        # Có thể thêm mô tả hoặc cấu hình khác tại đây (tùy chọn)
+      - name: customers # Ví dụ: customers. dbt sẽ tham chiếu bằng {{ source('raw_data', 'customers') }}
+      # Thêm các bảng thô khác nếu cần
+

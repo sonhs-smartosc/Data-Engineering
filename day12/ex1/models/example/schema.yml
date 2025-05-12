@@ -1,0 +1,54 @@
+
+version: 2
+
+models:
+  - name: example
+    description: "transformed_order"
+    columns:
+      - name: order_id
+        description: The unique identifier for the order after transformation.
+        tests:
+          - unique
+          - not_null
+
+      - name: customer_id
+        description: The unique identifier for the customer who placed the order.
+        tests:
+          - not_null # customer_id không được rỗng
+
+      - name: order_date
+        description: The date the order was placed.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true: # Cần package dbt-utils
+              expression: "order_date >= '2000-01-01'"
+          - dbt_utils.expression_is_true: # Cần package dbt-utils
+              expression: "order_date <= current_date"
+
+      - name: amount
+        description: The original amount of the order before tax (must be > 0 due to filtering).
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true: # Cần package dbt-utils
+              expression: "amount >= 0"
+
+
+      - name: amount_with_tax
+        description: The order amount including a calculated 10% tax.
+        tests:
+          - not_null # Giá trị sau thuế không được rỗng
+          - dbt_utils.expression_is_true: # Cần package dbt-utils
+              expression: "amount_with_tax >= amount"
+      - name: order_category
+        description: Categorization of the order based on its amount ('large_order' or 'small_order').
+        tests:
+          - not_null
+          - accepted_values: # ✅ Test kiểm tra giá trị chỉ nằm trong danh sách cho phép
+              values: ['small_order', 'large_order']
+
+      - name: processing_status
+        description: A fixed status indicating the order has been processed ('processed').
+        tests:
+          - not_null # Cột status không được rỗng
+          - accepted_values: # ✅ Test kiểm tra giá trị cố định
+              values: ['processed']

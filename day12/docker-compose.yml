@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  postgres_db:
+    image: postgres:16
+    container_name: simple_dbt_postgres
+    environment:
+      - POSTGRES_USER=${DBT_USER}
+      - POSTGRES_PASSWORD=${DBT_PASSWORD}
+      - POSTGRES_DB=${DBT_DEMO_DB}
+    volumes:
+      - ${POSTGRESQL_DATA}:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"

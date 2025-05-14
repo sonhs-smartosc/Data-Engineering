@@ -1,0 +1,7 @@
+project_id = "your-gcp-project-id"
+project_name = "aov-analytics"
+region = "us-central1"
+zone = "us-central1-a"
+machine_type = "e2-standard-4"
+bigquery_location = "US"
+credentials_file = "path/to/your/credentials.json"

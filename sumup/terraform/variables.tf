@@ -7,7 +7,7 @@ variable "project_id" {
 variable "kafka_spark_vm_name" {
   description = "Project name used for resource naming"
   type        = string
-  default     = "kafka_aov-analytics"
+  default     = "kafka-aov-analytics"
 }
 
 variable "region" {
@@ -25,7 +25,7 @@ variable "zone" {
 variable "machine_type" {
   description = "VM instance machine type"
   type        = string
-  default     = "e2-small" # 4 vCPUs, 16GB memory
+  default     = "e2-small" #
 }
 
 variable "bigquery_location" {

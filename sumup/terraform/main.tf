@@ -38,16 +38,11 @@ resource "google_compute_instance" "kafka_spark_vm" {
     # No need for usermod since we're using OS Login
   SCRIPT
 
-  service_account {
-    email  = google_service_account.spark_service_account.email
-    scopes = ["cloud-platform"]
-  }
-
   tags = ["kafka", "spark", "bigdata"]
 }
 
 resource "google_compute_instance" "aov_api_vm" {
-  name         = "aov_api_vm"
+  name         = "aov-api-vm"
   machine_type = "e2-small"
   zone         = "asia-southeast1-a"
 
@@ -74,23 +69,23 @@ resource "google_compute_instance" "aov_api_vm" {
 }
 
 # Create a service account for the VM
-resource "google_service_account" "spark_service_account" {
-  account_id   = "${var.kafka_spark_vm_name}-sa"
-  display_name = "Service Account for Spark BigQuery Integration"
-}
+# resource "google_service_account" "spark_service_account" {
+#   account_id   = "${var.kafka_spark_vm_name}-sa"
+#   display_name = "Service Account for Spark BigQuery Integration"
+# }
 
 # Grant permissions to the service account
-resource "google_project_iam_member" "bigquery_admin" {
-  project = var.project_id
-  role    = "roles/bigquery.admin"
-  member  = "serviceAccount:${google_service_account.spark_service_account.email}"
-}
-
-resource "google_project_iam_member" "storage_admin" {
-  project = var.project_id
-  role    = "roles/storage.admin"
-  member  = "serviceAccount:${google_service_account.spark_service_account.email}"
-}
+# resource "google_project_iam_member" "bigquery_admin" {
+#   project = var.project_id
+#   role    = "roles/bigquery.admin"
+#   member  = "serviceAccount:${google_service_account.spark_service_account.email}"
+# }
+#
+# resource "google_project_iam_member" "storage_admin" {
+#   project = var.project_id
+#   role    = "roles/storage.admin"
+#   member  = "serviceAccount:${google_service_account.spark_service_account.email}"
+# }
 
 # Create a GCS bucket for BigQuery temporary files
 resource "google_storage_bucket" "temp_bucket" {
@@ -152,7 +147,7 @@ resource "google_bigquery_table" "teams_table" {
   [
     {
       "name": "id",
-      "type": "INTEGER",
+      "type": "STRING",
       "mode": "REQUIRED",
       "description": "Unique team record ID"
     },
@@ -193,18 +188,6 @@ resource "google_bigquery_table" "teams_table" {
       "description": "Number of towers destroyed by the team"
     },
     {
-      "name": "inhibitors",
-      "type": "INTEGER",
-      "mode": "REQUIRED",
-      "description": "Number of inhibitors destroyed by the team"
-    },
-    {
-      "name": "heralds",
-      "type": "INTEGER",
-      "mode": "REQUIRED",
-      "description": "Number of heralds killed by the team"
-    },
-    {
       "name": "total_kills",
       "type": "INTEGER",
       "mode": "REQUIRED",
@@ -215,24 +198,6 @@ resource "google_bigquery_table" "teams_table" {
       "type": "INTEGER",
       "mode": "REQUIRED",
       "description": "Total gold earned by the team"
-    },
-    {
-      "name": "first_blood",
-      "type": "BOOLEAN",
-      "mode": "REQUIRED",
-      "description": "Whether the team got first blood"
-    },
-    {
-      "name": "first_tower",
-      "type": "BOOLEAN",
-      "mode": "REQUIRED",
-      "description": "Whether the team destroyed the first tower"
-    },
-    {
-      "name": "first_inhibitor",
-      "type": "BOOLEAN",
-      "mode": "REQUIRED",
-      "description": "Whether the team destroyed the first inhibitor"
     }
   ]
   EOF
@@ -246,7 +211,7 @@ resource "google_bigquery_table" "players_table" {
   [
     {
       "name": "id",
-      "type": "INTEGER",
+      "type": "STRING",
       "mode": "REQUIRED",
       "description": "Unique player record ID"
     },
@@ -255,12 +220,6 @@ resource "google_bigquery_table" "players_table" {
       "type": "STRING",
       "mode": "REQUIRED",
       "description": "ID of the match this player participated in"
-    },
-    {
-      "name": "participant_id",
-      "type": "INTEGER",
-      "mode": "REQUIRED",
-      "description": "Player participant ID (1-10)"
     },
     {
       "name": "team_id",

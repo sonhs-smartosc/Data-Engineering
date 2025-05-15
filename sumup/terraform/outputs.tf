@@ -17,8 +17,3 @@ output "temp_bucket" {
   value       = google_storage_bucket.temp_bucket.name
   description = "GCS bucket for BigQuery temporary files"
 }
-
-output "service_account" {
-  value       = google_service_account.spark_service_account.email
-  description = "Service account for Spark to access BigQuery"
-}

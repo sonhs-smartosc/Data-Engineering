@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
     from_json, col, expr, when, lit, array_contains, 
-    explode, size, sum as spark_sum, to_timestamp
+    explode, size, sum as spark_sum, to_timestamp, posexplode
 )
 from pyspark.sql.types import (
     StructType, StructField, StringType, IntegerType, 
@@ -13,10 +13,22 @@ from pyspark.sql.types import (
 )
 from google.cloud import bigquery
 from google.oauth2 import service_account
+from dotenv import load_dotenv
+
+load_dotenv()
+# Google BigQuery configuration
+PROJECT_ID = os.getenv("PROJECT_ID")
+DATASET_ID = os.getenv("DATASET_ID")
+MATCHES_TABLE = os.getenv("MATCHES_TABLE")
+TEAMS_TABLE = os.getenv("TEAMS_TABLE")
+PLAYERS_TABLE = os.getenv("PLAYERS_TABLE")
+CREDENTIALS_PATH = os.getenv("CREDENTIALS_PATH")
+
 
 # Define schema for parsing match result JSON
 team_stats_schema = ArrayType(
     StructType([
+        StructField("player_id", StringType(), True),
         StructField("champion", StringType(), True),
         StructField("kills", IntegerType(), True),
         StructField("deaths", IntegerType(), True),
@@ -44,26 +56,26 @@ match_schema = StructType([
     StructField("map", StringType(), True),
     StructField("duration", IntegerType(), True),
     StructField("winner", StringType(), True),
+    StructField("team1_id", StringType(), True),
+    StructField("team2_id", StringType(), True),
     StructField("team1", team_stats_schema, True),
     StructField("team2", team_stats_schema, True),
     StructField("objectives", objectives_schema, True)
 ])
 
-# Google BigQuery configuration
-PROJECT_ID = "your-gcp-project-id"
-DATASET_ID = "aov_matches"
-MATCHES_TABLE = "matches"
-TEAMS_TABLE = "teams"
-PLAYERS_TABLE = "players"
-CREDENTIALS_PATH = "/path/to/your/gcp/credentials.json"
-
 def initialize_spark():
-    """Initialize Spark session"""
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = CREDENTIALS_PATH
+
     return (SparkSession.builder
             .appName("AOVMatchConsumer")
             .config("spark.jars.packages", 
-                   "org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.0,com.google.cloud:google-cloud-bigquery:2.13.3")
+                    "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0," 
+                    "com.google.cloud.spark:spark-bigquery-with-dependencies_2.12:0.32.0," 
+                    "com.google.cloud.bigdataoss:gcs-connector:hadoop3-2.2.11")
+            .config("spark.hadoop.google.cloud.auth.service.account.enable", "true")
             .config("spark.hadoop.google.cloud.auth.service.account.json.keyfile", CREDENTIALS_PATH)
+            .config("spark.hadoop.fs.gs.impl", "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem")
+            .config("spark.hadoop.fs.AbstractFileSystem.gs.impl", "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFS")
             .getOrCreate())
 
 def create_kafka_stream(spark):
@@ -87,13 +99,15 @@ def process_match_data(kafka_df):
     parsed_df = parsed_df.withColumn("start_timestamp", 
                                     to_timestamp(col("timestamp")))
     
-    # Calculate end_time based on start_time and duration
+    # Calculate end_time based on start_time and duration - fixed syntax here
     parsed_df = parsed_df.withColumn("end_timestamp", 
-                                    expr("start_timestamp + interval duration second"))
+                                    expr("start_timestamp + INTERVAL 1 SECOND * duration"))
     
-    # Extract matches table data
+    # Extract matches table data]
+    print("---------------------------------------------------------------------")
+    print(parsed_df)
     matches_df = parsed_df.select(
-        col("match_id"),
+        col("match_id").alias("id"),
         col("start_timestamp").alias("start_time"),
         col("end_timestamp").alias("end_time"),
         col("duration").alias("duration_seconds")
@@ -103,54 +117,43 @@ def process_match_data(kafka_df):
     # First, compute team totals and create team1 record
     team1_df = parsed_df.select(
         col("match_id"),
-        lit(1).alias("team_id"),  # Using 1 for team1 and 2 for team2
+        col("team1_id").alias("id"),
+        lit(1).alias("team_id"),
         (col("winner") == "team1").alias("win"),
         col("objectives.team1_dragons").alias("dragons"),
         col("objectives.team1_barons").alias("barons"),
         col("objectives.team1_towers").alias("towers"),
-        # Note: inhibitors and heralds are not in the original data, adding as 0
-        lit(0).alias("inhibitors"),
-        lit(0).alias("heralds"),
-        # Calculate aggregates from player data
-        expr("array_sum(transform(team1, x -> x.kills))").alias("total_kills"),
-        expr("array_sum(transform(team1, x -> x.gold))").alias("total_gold"),
-        # These fields aren't in the data, so randomly assign for demonstration
-        (expr("rand()") > 0.5).alias("first_blood"),
-        (expr("rand()") > 0.5).alias("first_tower"),
-        (expr("rand()") > 0.5).alias("first_inhibitor")
+        expr("aggregate(team1, 0, (acc, x) -> acc + x.kills)").alias("total_kills"),
+        expr("aggregate(team1, 0, (acc, x) -> acc + x.gold)").alias("total_gold"),
     )
-    
+
     # Create team2 record
     team2_df = parsed_df.select(
         col("match_id"),
+        col("team2_id").alias("id"),  # Use the actual team2_id from the data
         lit(2).alias("team_id"),
         (col("winner") == "team2").alias("win"),
         col("objectives.team2_dragons").alias("dragons"),
         col("objectives.team2_barons").alias("barons"),
         col("objectives.team2_towers").alias("towers"),
-        lit(0).alias("inhibitors"),
-        lit(0).alias("heralds"),
-        expr("array_sum(transform(team2, x -> x.kills))").alias("total_kills"),
-        expr("array_sum(transform(team2, x -> x.gold))").alias("total_gold"),
-        (expr("rand()") > 0.5).alias("first_blood"),
-        (expr("rand()") > 0.5).alias("first_tower"),
-        (expr("rand()") > 0.5).alias("first_inhibitor")
+        expr("aggregate(team2, 0, (acc, x) -> acc + x.kills)").alias("total_kills"),
+        expr("aggregate(team2, 0, (acc, x) -> acc + x.gold)").alias("total_gold"),
     )
-    
+
     # Union the two team dataframes
     teams_df = team1_df.union(team2_df)
-    
+
     # Process players data - first explode team1 players
+    # Use posexplode to get both index and element
     team1_players = parsed_df.select(
         col("match_id"),
         lit(1).alias("team_id"),
         (col("winner") == "team1").alias("win"),
-        explode(col("team1")).alias("player_data")
+        posexplode(col("team1")).alias("pos", "player_data")
     ).select(
+        col("player_data.player_id").alias("id"),
         col("match_id"),
         col("team_id"),
-        # Assign participant IDs 1-5 for team1
-        expr("posexplode(team1)").getItem(0).plus(1).alias("participant_id"),
         col("player_data.champion"),
         col("player_data.kills"),
         col("player_data.deaths"),
@@ -160,18 +163,17 @@ def process_match_data(kafka_df):
         col("player_data.gold").alias("gold_earned"),
         col("win")
     )
-    
+
     # Process team2 players
     team2_players = parsed_df.select(
         col("match_id"),
         lit(2).alias("team_id"),
         (col("winner") == "team2").alias("win"),
-        explode(col("team2")).alias("player_data")
+        posexplode(col("team2")).alias("pos", "player_data")
     ).select(
+        col("player_data.player_id").alias("id"),
         col("match_id"),
         col("team_id"),
-        # Assign participant IDs 6-10 for team2
-        expr("posexplode(team2)").getItem(0).plus(6).alias("participant_id"),
         col("player_data.champion"),
         col("player_data.kills"),
         col("player_data.deaths"),
@@ -181,10 +183,10 @@ def process_match_data(kafka_df):
         col("player_data.gold").alias("gold_earned"),
         col("win")
     )
-    
+
     # Union the two player dataframes
     players_df = team1_players.union(team2_players)
-    
+
     return matches_df, teams_df, players_df
 
 def write_to_bigquery(batch_df, table_name, batch_id):
@@ -192,23 +194,28 @@ def write_to_bigquery(batch_df, table_name, batch_id):
     try:
         # Set up BigQuery table path
         table_id = f"{PROJECT_ID}.{DATASET_ID}.{table_name}"
-        
-        # Write mode - append to the table
-        write_mode = "append"
-        
-        # Write to BigQuery
-        batch_df.write \
-            .format("bigquery") \
-            .option("table", table_id) \
-            .option("temporaryGcsBucket", "your-temp-bucket") \
-            .mode(write_mode) \
-            .save()
-        
+
+        # Convert Spark DataFrame to Pandas DataFrame
+        pandas_df = batch_df.toPandas()
+
+        # Create BigQuery client
+        credentials = service_account.Credentials.from_service_account_file(CREDENTIALS_PATH)
+        client = bigquery.Client(credentials=credentials, project=PROJECT_ID)
+
+        # Load data to BigQuery directly
+        job_config = bigquery.LoadJobConfig(write_disposition="WRITE_APPEND")
+        job = client.load_table_from_dataframe(pandas_df, table_id, job_config=job_config)
+
+        # Wait for the job to complete
+        job.result()
+
         print(f"Successfully wrote batch {batch_id} to BigQuery table {table_id}")
         return True
-    
+
     except Exception as e:
         print(f"Error writing to BigQuery: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return False
 
 def process_batch(batch_df, batch_id):
@@ -220,12 +227,12 @@ def process_batch(batch_df, batch_id):
     try:
         # Parse and transform the data
         matches_df, teams_df, players_df = process_match_data(batch_df)
-        
+
         # Write each table to BigQuery
         write_to_bigquery(matches_df, MATCHES_TABLE, batch_id)
-        write_to_bigquery(teams_df, TEAMS_TABLE, batch_id) 
+        write_to_bigquery(teams_df, TEAMS_TABLE, batch_id)
         write_to_bigquery(players_df, PLAYERS_TABLE, batch_id)
-        
+
         print(f"Successfully processed batch {batch_id}")
     except Exception as e:
         print(f"Error processing batch {batch_id}: {str(e)}")
@@ -238,7 +245,7 @@ def ensure_bigquery_resources():
         # Create BigQuery client
         credentials = service_account.Credentials.from_service_account_file(CREDENTIALS_PATH)
         client = bigquery.Client(credentials=credentials, project=PROJECT_ID)
-        
+
         # Create dataset if it doesn't exist
         dataset_id = f"{PROJECT_ID}.{DATASET_ID}"
         try:
@@ -249,15 +256,15 @@ def ensure_bigquery_resources():
             dataset.location = "US"  # Set your preferred location
             client.create_dataset(dataset, exists_ok=True)
             print(f"Created dataset {dataset_id}")
-        
+
         # Define table schemas
         matches_schema = [
             bigquery.SchemaField("match_id", "STRING", mode="REQUIRED"),
             bigquery.SchemaField("start_time", "TIMESTAMP", mode="REQUIRED"),
-            bigquery.SchemaField("end_time", "TIMESTAMP", mode="REQUIRED"), 
+            bigquery.SchemaField("end_time", "TIMESTAMP", mode="REQUIRED"),
             bigquery.SchemaField("duration_seconds", "INTEGER", mode="REQUIRED")
         ]
-        
+
         teams_schema = [
             bigquery.SchemaField("match_id", "STRING", mode="REQUIRED"),
             bigquery.SchemaField("team_id", "INTEGER", mode="REQUIRED"),
@@ -265,19 +272,13 @@ def ensure_bigquery_resources():
             bigquery.SchemaField("dragons", "INTEGER", mode="REQUIRED"),
             bigquery.SchemaField("barons", "INTEGER", mode="REQUIRED"),
             bigquery.SchemaField("towers", "INTEGER", mode="REQUIRED"),
-            bigquery.SchemaField("inhibitors", "INTEGER", mode="REQUIRED"),
-            bigquery.SchemaField("heralds", "INTEGER", mode="REQUIRED"),
             bigquery.SchemaField("total_kills", "INTEGER", mode="REQUIRED"),
             bigquery.SchemaField("total_gold", "INTEGER", mode="REQUIRED"),
-            bigquery.SchemaField("first_blood", "BOOLEAN", mode="REQUIRED"),
-            bigquery.SchemaField("first_tower", "BOOLEAN", mode="REQUIRED"),
-            bigquery.SchemaField("first_inhibitor", "BOOLEAN", mode="REQUIRED")
         ]
-        
+
         players_schema = [
             bigquery.SchemaField("match_id", "STRING", mode="REQUIRED"),
             bigquery.SchemaField("team_id", "INTEGER", mode="REQUIRED"),
-            bigquery.SchemaField("participant_id", "INTEGER", mode="REQUIRED"),
             bigquery.SchemaField("champion", "STRING", mode="REQUIRED"),
             bigquery.SchemaField("kills", "INTEGER", mode="REQUIRED"),
             bigquery.SchemaField("deaths", "INTEGER", mode="REQUIRED"),
@@ -287,14 +288,14 @@ def ensure_bigquery_resources():
             bigquery.SchemaField("gold_earned", "INTEGER", mode="REQUIRED"),
             bigquery.SchemaField("win", "BOOLEAN", mode="REQUIRED")
         ]
-        
+
         # Create tables if they don't exist
         tables = {
             MATCHES_TABLE: matches_schema,
             TEAMS_TABLE: teams_schema,
             PLAYERS_TABLE: players_schema
         }
-        
+
         for table_name, schema in tables.items():
             table_id = f"{dataset_id}.{table_name}"
             try:
@@ -304,9 +305,9 @@ def ensure_bigquery_resources():
                 table = bigquery.Table(table_id, schema=schema)
                 client.create_table(table, exists_ok=True)
                 print(f"Created table {table_id}")
-        
+
         return True
-    
+
     except Exception as e:
         print(f"Error ensuring BigQuery resources: {str(e)}")
         import traceback
@@ -319,12 +320,12 @@ def run_streaming_job():
     if not ensure_bigquery_resources():
         print("Failed to ensure BigQuery resources. Exiting.")
         return
-    
+
     spark = initialize_spark()
-    
+
     # Create streaming DataFrame from Kafka
     kafka_df = create_kafka_stream(spark)
-    
+
     # Define the streaming query with foreachBatch to handle microbatches
     query = (kafka_df
              .writeStream
@@ -333,7 +334,7 @@ def run_streaming_job():
              .option("checkpointLocation", "/tmp/checkpoint")
              .trigger(processingTime="30 seconds")  # Process every 30 seconds
              .start())
-    
+
     # Wait for the streaming query to terminate
     query.awaitTermination()
 
@@ -347,3 +348,4 @@ if __name__ == "__main__":
         print(f"Error in consumer: {e}")
         import traceback
         traceback.print_exc()
+
